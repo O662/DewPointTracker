@@ -221,7 +221,11 @@ class _ReadyState extends StatelessWidget {
 
   Widget _card(String id, WeatherData weather, TempUnit unit) => switch (id) {
         'hilo' => _HiLo(weather: weather, unit: unit),
-        'dewpoint' => _DewPointCard(weather: weather, unit: unit),
+        'dewpoint' => _DewPointCard(
+            weather: weather,
+            unit: unit,
+            allowProfanity: !controller.profanityFilter,
+          ),
         'metrics' => _Metrics(weather: weather, unit: unit),
         'hourly' => HourlyStrip(hours: weather.hourly, unit: unit),
         'daily' => DailyForecastCard(days: weather.daily, unit: unit),
@@ -512,10 +516,15 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
 }
 
 class _DewPointCard extends StatelessWidget {
-  const _DewPointCard({required this.weather, required this.unit});
+  const _DewPointCard({
+    required this.weather,
+    required this.unit,
+    required this.allowProfanity,
+  });
 
   final WeatherData weather;
   final TempUnit unit;
+  final bool allowProfanity;
 
   @override
   Widget build(BuildContext context) {
@@ -540,7 +549,11 @@ class _DewPointCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          DewPointGauge(dewPointC: weather.dewPointC, unit: unit),
+          DewPointGauge(
+            dewPointC: weather.dewPointC,
+            unit: unit,
+            allowProfanity: allowProfanity,
+          ),
         ],
       ),
     );

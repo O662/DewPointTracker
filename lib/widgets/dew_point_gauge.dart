@@ -11,10 +11,15 @@ class DewPointGauge extends StatelessWidget {
     super.key,
     required this.dewPointC,
     required this.unit,
+    this.allowProfanity = false,
   });
 
   final double dewPointC;
   final TempUnit unit;
+
+  /// True when the Settings profanity filter is off — the blurb under the
+  /// comfort label comes from the uncensored pool.
+  final bool allowProfanity;
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +65,7 @@ class DewPointGauge extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          comfort.blurb,
+          comfort.blurb(allowProfanity: allowProfanity),
           style: TextStyle(
             fontSize: 13.5,
             color: Colors.white.withValues(alpha: 0.7),

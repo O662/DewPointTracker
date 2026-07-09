@@ -157,6 +157,22 @@ void main() {
     });
   });
 
+  group('profanity filter', () {
+    test('defaults on, toggles, and persists', () async {
+      final c = _controller();
+      await c.load();
+      expect(c.profanityFilter, isTrue);
+
+      c.setProfanityFilter(false);
+      expect(c.profanityFilter, isFalse);
+
+      await pumpEventQueue();
+      final c2 = _controller();
+      await c2.load();
+      expect(c2.profanityFilter, isFalse);
+    });
+  });
+
   group('card order', () {
     test('moveCard reorders and persists', () async {
       final c = _controller();

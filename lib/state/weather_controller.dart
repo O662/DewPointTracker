@@ -55,6 +55,7 @@ class WeatherController extends ChangeNotifier {
   static const _cardOrderPrefsKey = 'home_card_order';
   static const _radarPastPrefsKey = 'radar_past_hours';
   static const _radarFuturePrefsKey = 'radar_future_hours';
+  static const _profanityFilterPrefsKey = 'profanity_filter';
 
   /// Ids of the reorderable home cards, in default order.
   static const defaultCardOrder = [
@@ -87,6 +88,10 @@ class WeatherController extends ChangeNotifier {
   /// ranges regardless.
   int radarPastHours = kDefaultRadarPastHours;
   int radarFutureHours = kDefaultRadarFutureHours;
+
+  /// Keeps the dew point blurbs family-friendly (Settings page, persisted).
+  /// Turning it off switches the gauge to the uncensored blurb pool.
+  bool profanityFilter = true;
 
   /// The place currently being viewed (null = device location). Persisted.
   SavedPlace? place;
@@ -326,6 +331,25 @@ class WeatherController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------
+  // Blurb settings
+  // ---------------------------------------------------------------------
+
+  /// Toggle the dew point blurb profanity filter (Settings page).
+  void setProfanityFilter(bool value) {
+    if (value == profanityFilter) return;
+    profanityFilter = value;
+    notifyListeners();
+    _persistProfanityFilter();
+  }
+
+  Future<void> _persistProfanityFilter() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_profanityFilterPrefsKey, profanityFilter);
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------
   // Persistence
   // ---------------------------------------------------------------------
 
@@ -343,6 +367,8 @@ class WeatherController extends ChangeNotifier {
       radarFutureHours = (prefs.getInt(_radarFuturePrefsKey) ??
               kDefaultRadarFutureHours)
           .clamp(kMinRadarFutureHours, kMaxRadarFutureHours);
+
+      profanityFilter = prefs.getBool(_profanityFilterPrefsKey) ?? true;
 
       final savedOrder = prefs.getStringList(_cardOrderPrefsKey);
       if (savedOrder != null) {

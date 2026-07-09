@@ -102,6 +102,70 @@ class SettingsScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+                GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.chat_bubble_outline_rounded,
+                              size: 16,
+                              color: Colors.white.withValues(alpha: 0.8)),
+                          const SizedBox(width: 6),
+                          Text(
+                            'DEW POINT BLURBS',
+                            style: TextStyle(
+                              fontSize: 12,
+                              letterSpacing: 1.2,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Profanity filter',
+                                  style: TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Keeps the comfort blurbs family-friendly. '
+                                  'Turn off and they stop holding back.',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    height: 1.4,
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Switch(
+                            value: controller.profanityFilter,
+                            onChanged: controller.setProfanityFilter,
+                            activeTrackColor: const Color(0xFF4FB0E8),
+                            inactiveTrackColor:
+                                Colors.white.withValues(alpha: 0.18),
+                            inactiveThumbColor: Colors.white,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
