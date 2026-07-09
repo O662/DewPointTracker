@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget background gradient. Colors mirror SkyPalette in
+     lib/theme/app_theme.dart; keep the two in sync. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:startColor="#FF1E2A38"
+        android:centerColor="#FF35465A"
+        android:endColor="#FF566476"
+        android:type="linear" />
+    <corners android:radius="24dp" />
+</shape>

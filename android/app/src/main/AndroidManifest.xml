@@ -28,6 +28,63 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Home-screen widgets. Rendered natively and refreshed by
+             WorkManager so they stay current without the app running. -->
+        <receiver
+            android:name=".widgets.DewPointWidget"
+            android:exported="false"
+            android:label="@string/widget_dew_point_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_dew_point_info"/>
+        </receiver>
+        <receiver
+            android:name=".widgets.CurrentWidget"
+            android:exported="false"
+            android:label="@string/widget_current_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_current_info"/>
+        </receiver>
+        <receiver
+            android:name=".widgets.HourlyWidget"
+            android:exported="false"
+            android:label="@string/widget_hourly_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_hourly_info"/>
+        </receiver>
+        <receiver
+            android:name=".widgets.DailyWidget"
+            android:exported="false"
+            android:label="@string/widget_daily_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_daily_info"/>
+        </receiver>
+        <receiver
+            android:name=".widgets.LargeWidget"
+            android:exported="false"
+            android:label="@string/widget_large_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_large_info"/>
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

@@ -9,6 +9,7 @@ import '../models/weather_data.dart';
 import '../radar_config.dart';
 import '../services/location_service.dart';
 import '../services/weather_service.dart';
+import '../services/widget_bridge.dart';
 
 enum LoadStatus { idle, loading, ready, error }
 
@@ -56,6 +57,7 @@ class WeatherController extends ChangeNotifier {
   static const _radarPastPrefsKey = 'radar_past_hours';
   static const _radarFuturePrefsKey = 'radar_future_hours';
   static const _profanityFilterPrefsKey = 'profanity_filter';
+  static const _unitPrefsKey = 'temp_unit';
 
   /// Ids of the reorderable home cards, in default order.
   static const defaultCardOrder = [
@@ -219,6 +221,13 @@ class WeatherController extends ChangeNotifier {
         slot.latitude = location.latitude;
         slot.longitude = location.longitude;
         slot.label = location.label;
+        // Home-screen widgets can't use location services in the background;
+        // they follow the app's most recent fix instead.
+        unawaited(WidgetBridge.saveLastFix(
+          latitude: location.latitude,
+          longitude: location.longitude,
+          label: location.label,
+        ));
       }
 
       slot.weather = await _weatherService.fetch(
@@ -227,6 +236,7 @@ class WeatherController extends ChangeNotifier {
       );
       slot.lastFetched = DateTime.now();
       slot.status = LoadStatus.ready;
+      if (slot.key == active.key) unawaited(WidgetBridge.sync());
     } on LocationException catch (e) {
       slot.errorMessage = e.message;
       slot.permissionBlocked = e.openSettings;
@@ -339,7 +349,7 @@ class WeatherController extends ChangeNotifier {
     if (value == profanityFilter) return;
     profanityFilter = value;
     notifyListeners();
-    _persistProfanityFilter();
+    _persistProfanityFilter().then((_) => WidgetBridge.sync());
   }
 
   Future<void> _persistProfanityFilter() async {
@@ -369,6 +379,9 @@ class WeatherController extends ChangeNotifier {
           .clamp(kMinRadarFutureHours, kMaxRadarFutureHours);
 
       profanityFilter = prefs.getBool(_profanityFilterPrefsKey) ?? true;
+      unit = prefs.getString(_unitPrefsKey) == 'c'
+          ? TempUnit.celsius
+          : TempUnit.fahrenheit;
 
       final savedOrder = prefs.getStringList(_cardOrderPrefsKey);
       if (savedOrder != null) {
@@ -384,6 +397,8 @@ class WeatherController extends ChangeNotifier {
       // Persistence is best-effort; defaults still work this session.
     }
     _rebuildSlots();
+    // Hand the native home-screen widgets the current blurb pools.
+    unawaited(WidgetBridge.writeComfortBands());
   }
 
   Future<void> _persistSelectedPlace() async {
@@ -394,6 +409,8 @@ class WeatherController extends ChangeNotifier {
       } else {
         await prefs.remove(_placePrefsKey);
       }
+      // Widgets show the place the app is viewing; retarget them right away.
+      await WidgetBridge.sync();
     } catch (_) {}
   }
 
@@ -415,6 +432,15 @@ class WeatherController extends ChangeNotifier {
     unit =
         unit == TempUnit.fahrenheit ? TempUnit.celsius : TempUnit.fahrenheit;
     notifyListeners();
+    _persistUnit().then((_) => WidgetBridge.sync());
+  }
+
+  Future<void> _persistUnit() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _unitPrefsKey, unit == TempUnit.celsius ? 'c' : 'f');
+    } catch (_) {}
   }
 
   @override

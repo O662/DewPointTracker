@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Small widget: current temperature + sky conditions, left aligned. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_sky_loading"
+    android:gravity="start|center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="10dp">
+
+    <ImageView
+        android:id="@+id/glyph"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/temp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-light"
+            android:includeFontPadding="false"
+            android:shadowColor="#40000000"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:textColor="#FFFFFFFF"
+            android:textSize="32sp" />
+
+        <TextView
+            android:id="@+id/cond"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:shadowColor="#40000000"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:textColor="#DEFFFFFF"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/loc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:shadowColor="#40000000"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:textColor="#99FFFFFF"
+            android:textSize="11sp" />
+    </LinearLayout>
+</LinearLayout>

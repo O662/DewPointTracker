@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_dew_point_label">Dew point</string>
+    <string name="widget_dew_point_description">Dew point, comfort level, and feels-like temperature.</string>
+    <string name="widget_current_label">Conditions</string>
+    <string name="widget_current_description">Current temperature and sky conditions.</string>
+    <string name="widget_hourly_label">Next 6 hours</string>
+    <string name="widget_hourly_description">Hour-by-hour temperature and conditions for the next 6 hours.</string>
+    <string name="widget_daily_label">5-day forecast</string>
+    <string name="widget_daily_description">Highs, lows, and conditions for the next 5 days.</string>
+    <string name="widget_large_label">Weather overview</string>
+    <string name="widget_large_description">Conditions, dew point comfort gauge, and the next 3 hours.</string>
+
+    <string name="widget_caption_dew_point">DEW POINT</string>
+
+    <string name="widget_scale_dry">Dry</string>
+    <string name="widget_scale_comfort">Comfort</string>
+    <string name="widget_scale_muggy">Muggy</string>
+    <string name="widget_scale_severe">Severe</string>
+
+    <string name="widget_empty_title">Dew Point Tracker</string>
+    <string name="widget_empty_message">Open the app once to load weather for your location.</string>
+</resources>
