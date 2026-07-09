@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:dew_point_tracker/models/saved_place.dart';
-import 'package:dew_point_tracker/models/weather_code.dart';
-import 'package:dew_point_tracker/models/weather_data.dart';
-import 'package:dew_point_tracker/screens/home_screen.dart';
-import 'package:dew_point_tracker/services/location_service.dart';
-import 'package:dew_point_tracker/services/weather_service.dart';
-import 'package:dew_point_tracker/state/weather_controller.dart';
+import 'package:weather_dew/models/saved_place.dart';
+import 'package:weather_dew/models/weather_code.dart';
+import 'package:weather_dew/models/weather_data.dart';
+import 'package:weather_dew/screens/home_screen.dart';
+import 'package:weather_dew/services/location_service.dart';
+import 'package:weather_dew/services/weather_service.dart';
+import 'package:weather_dew/state/weather_controller.dart';
 
 WeatherData _weather() => WeatherData(
       temperatureC: 20,

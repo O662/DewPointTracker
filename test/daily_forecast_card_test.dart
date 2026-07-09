@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:dew_point_tracker/models/units.dart';
-import 'package:dew_point_tracker/models/weather_code.dart';
-import 'package:dew_point_tracker/models/weather_data.dart';
-import 'package:dew_point_tracker/widgets/daily_forecast_card.dart';
+import 'package:weather_dew/models/units.dart';
+import 'package:weather_dew/models/weather_code.dart';
+import 'package:weather_dew/models/weather_data.dart';
+import 'package:weather_dew/widgets/daily_forecast_card.dart';
 
 List<DailyForecast> _days(int count) => [
       for (var i = 0; i < count; i++)

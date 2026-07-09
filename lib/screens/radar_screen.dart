@@ -333,7 +333,7 @@ class _RadarScreenState extends State<RadarScreen> {
               urlTemplate:
                   'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
               subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'com.dewpoint.dew_point_tracker',
+              userAgentPackageName: 'com.weatherdew.app',
               maxZoom: 19,
               tileProvider:
                   NetworkTileProvider(httpClient: _fetchMonitor.client),
@@ -346,7 +346,7 @@ class _RadarScreenState extends State<RadarScreen> {
               urlTemplate:
                   'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
               subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'com.dewpoint.dew_point_tracker',
+              userAgentPackageName: 'com.weatherdew.app',
               maxZoom: 19,
               tileProvider:
                   NetworkTileProvider(httpClient: _fetchMonitor.client),
@@ -469,7 +469,7 @@ class _RadarScreenState extends State<RadarScreen> {
         // timeline refresh swaps templates and only new frames remount.
         key: ValueKey(frame.tileUrlTemplate),
         urlTemplate: frame.tileUrlTemplate,
-        userAgentPackageName: 'com.dewpoint.dew_point_tracker',
+        userAgentPackageName: 'com.weatherdew.app',
         // Each frame carries its own tile geometry: the IEM sources are
         // plain 256px tiles capped at the zoom where one data cell ≈ one
         // tile pixel (NEXRAD 8, HRRR 6); RainViewer uses 512px tiles with

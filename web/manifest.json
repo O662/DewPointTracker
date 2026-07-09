@@ -1,6 +1,6 @@
 {
-    "name": "dew_point_tracker",
-    "short_name": "dew_point_tracker",
+    "name": "WeatherDew",
+    "short_name": "WeatherDew",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -1,5 +1,5 @@
-name: dew_point_tracker
-description: "A new Flutter project."
+name: weather_dew
+description: "WeatherDew — local weather, radar, and dew point comfort."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -55,6 +55,23 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Launcher icons are generated from the WeatherDew logo with
+# `dart run flutter_launcher_icons`.
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  android: true
+  # The logo is full-bleed, so it works as the adaptive foreground; the
+  # background matches the sky at the top of the illustration.
+  adaptive_icon_background: "#8ADAF0"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+  windows:
+    generate: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

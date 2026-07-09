@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:dew_point_tracker/services/weather_service.dart';
+import 'package:weather_dew/services/weather_service.dart';
 
 Map<String, dynamic> _mainJson() => {
       'current': {

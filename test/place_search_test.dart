@@ -1,5 +1,5 @@
-import 'package:dew_point_tracker/models/saved_place.dart';
-import 'package:dew_point_tracker/services/place_search_service.dart';
+import 'package:weather_dew/models/saved_place.dart';
+import 'package:weather_dew/services/place_search_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';

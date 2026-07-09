@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:dew_point_tracker/models/dew_point_comfort.dart';
+import 'package:weather_dew/models/dew_point_comfort.dart';
 
 void main() {
   group('blurb pools', () {

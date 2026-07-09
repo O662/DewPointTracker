@@ -20,7 +20,7 @@ import '../models/dew_point_comfort.dart';
 ///
 /// Every method is a silent no-op off Android (web, desktop, unit tests).
 class WidgetBridge {
-  static const _channel = MethodChannel('dewpoint/widgets');
+  static const _channel = MethodChannel('weatherdew/widgets');
   static const _blurbsKey = 'widget_blurbs';
   static const _lastFixKey = 'widget_last_fix';
 

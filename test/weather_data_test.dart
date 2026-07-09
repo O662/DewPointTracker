@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:dew_point_tracker/models/weather_data.dart';
+import 'package:weather_dew/models/weather_data.dart';
 
 Map<String, dynamic> _json() => {
       'current': {

@@ -29,7 +29,7 @@ class DewPointApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Dew Point Tracker',
+      title: 'WeatherDew',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(),
       home: const RootShell(),

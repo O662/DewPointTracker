@@ -6,7 +6,7 @@ import '../models/weather_data.dart';
 import 'glass_card.dart';
 import 'weather_glyph.dart';
 
-const _precipColor = Color(0xFF4FB0E8);
+const _precipColor = Color(0xFF0D5C9E);
 
 /// Day-by-day outlook: one row per day with the condition glyph, rain chance,
 /// and the day's low→high span drawn as a bar positioned within the whole

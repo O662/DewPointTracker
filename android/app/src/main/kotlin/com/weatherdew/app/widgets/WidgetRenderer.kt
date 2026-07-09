@@ -1,4 +1,4 @@
-package com.dewpoint.dew_point_tracker.widgets
+package com.weatherdew.app.widgets
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -14,8 +14,8 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.view.View
 import android.widget.RemoteViews
-import com.dewpoint.dew_point_tracker.MainActivity
-import com.dewpoint.dew_point_tracker.R
+import com.weatherdew.app.MainActivity
+import com.weatherdew.app.R
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId

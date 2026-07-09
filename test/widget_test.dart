@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:dew_point_tracker/models/dew_point_comfort.dart';
-import 'package:dew_point_tracker/models/units.dart';
+import 'package:weather_dew/models/dew_point_comfort.dart';
+import 'package:weather_dew/models/units.dart';
 
 void main() {
   group('DewPointComfort.fromCelsius', () {

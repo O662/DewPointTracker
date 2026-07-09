@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.dewpoint" "\0"
-            VALUE "FileDescription", "dew_point_tracker" "\0"
+            VALUE "CompanyName", "com.weatherdew" "\0"
+            VALUE "FileDescription", "WeatherDew" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "dew_point_tracker" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.dewpoint. All rights reserved." "\0"
-            VALUE "OriginalFilename", "dew_point_tracker.exe" "\0"
-            VALUE "ProductName", "dew_point_tracker" "\0"
+            VALUE "InternalName", "weather_dew" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.weatherdew. All rights reserved." "\0"
+            VALUE "OriginalFilename", "weather_dew.exe" "\0"
+            VALUE "ProductName", "WeatherDew" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -18,6 +18,6 @@
     <string name="widget_scale_muggy">Muggy</string>
     <string name="widget_scale_severe">Severe</string>
 
-    <string name="widget_empty_title">Dew Point Tracker</string>
+    <string name="widget_empty_title">WeatherDew</string>
     <string name="widget_empty_message">Open the app once to load weather for your location.</string>
 </resources>

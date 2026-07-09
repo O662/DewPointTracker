@@ -1,4 +1,4 @@
-package com.dewpoint.dew_point_tracker.widgets
+package com.weatherdew.app.widgets
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
