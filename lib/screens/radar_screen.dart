@@ -1,17 +1,15 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../radar_config.dart';
-import '../services/forecast_key_store.dart';
 import '../services/radar_service.dart';
+import '../services/tile_fetch_monitor.dart';
 import '../state/weather_controller.dart';
 import '../widgets/glass_card.dart';
-import 'forecast_setup_sheet.dart';
+import 'location_search_sheet.dart';
 
 class RadarScreen extends StatefulWidget {
   const RadarScreen({super.key, required this.controller});
@@ -24,50 +22,22 @@ class RadarScreen extends StatefulWidget {
 
 class _RadarScreenState extends State<RadarScreen> {
   final RadarService _service = RadarService();
-  final ForecastKeyStore _keyStore = ForecastKeyStore();
   final MapController _map = MapController();
+  // One shared HTTP client behind every tile layer (base map, labels, radar),
+  // so the top-bar glow can pulse while ANY map imagery is downloading.
+  final TileFetchMonitor _fetchMonitor = TileFetchMonitor();
 
-  // RainViewer only renders radar tiles up to zoom 7; above that its server
-  // returns a "Zoom Level Not Supported" placeholder image. We cap native fetches
-  // here and let flutter_map upscale for deeper zooms.
-  static const int radarMaxNativeZoom = 7;
-  // Tomorrow.io serves precipitation tiles up to zoom 12, at a finer native
-  // resolution than RainViewer. We cap a little below to conserve free-tier
-  // API usage and upscale beyond.
-  static const int forecastMaxNativeZoom = 10;
-  // Above this zoom the upscaled radar starts looking blocky, so we surface a
-  // little explanatory notice.
+  // Keep the map's zoom ceiling near the radar's usable range. At the old cap
+  // of 15 the radar was stretched 128×+ — an unreadable smear that could also
+  // fail to rasterize (radar vanished entirely at max zoom). Zoom 12 is
+  // street-map-legible, keeps NEXRAD's bilinear upscale (native cap 8, one
+  // ~550 m cell per tile pixel) smooth rather than smeared, and keeps the
+  // RainViewer fallback to a tolerable upscale.
+  static const double mapMaxZoom = 12;
+  // Above this zoom the RainViewer fallback starts looking blocky, so we
+  // surface a little explanatory notice. (NEXRAD is native all the way to the
+  // zoom cap, so the notice is skipped in the US.)
   static const double pixelNoticeZoom = 8.5;
-  // Smooth the radar's blocky data cells into fluid, rounded contours — WITHOUT
-  // the hazy look of a plain blur. This is a two-step "gooey" filter: a small
-  // blur first rounds off the square corners, then an alpha-contrast colour
-  // matrix snaps that softened edge back to a crisp line. The precipitation
-  // stays vivid and sharp-edged — only the shape changes, from stair-stepped
-  // pixels to smooth shorelines. Purely cosmetic; it doesn't add real detail.
-  // Tunables:
-  //   • _radarRoundingRadius — how far corners get rounded (bigger = smoother).
-  //   • _radarEdgeGain       — edge crispness (bigger = harder line, less feather).
-  //   • _radarEdgePivot      — 0..1 alpha cut point (lower = shapes merge/grow more).
-  static const double _radarRoundingRadius = 2.5;
-  static const double _radarEdgeGain = 16;
-  static const double _radarEdgePivot = 0.45;
-
-  static final ui.ImageFilter _radarSmoothFilter = ui.ImageFilter.compose(
-    // 2) Re-crisp the blurred edge: keep RGB untouched, steepen the alpha ramp
-    //    so the soft falloff becomes a clean (still lightly anti-aliased) line.
-    outer: const ui.ColorFilter.matrix(<double>[
-      1, 0, 0, 0, 0,
-      0, 1, 0, 0, 0,
-      0, 0, 1, 0, 0,
-      0, 0, 0, _radarEdgeGain, (0.5 - _radarEdgeGain * _radarEdgePivot) * 255,
-    ]),
-    // 1) Round the blocky corners.
-    inner: ui.ImageFilter.blur(
-      sigmaX: _radarRoundingRadius,
-      sigmaY: _radarRoundingRadius,
-      tileMode: TileMode.decal,
-    ),
-  );
   // Accent for forecast (future) frames.
   static const Color forecastAccent = Color(0xFFFFC15E);
 
@@ -86,30 +56,96 @@ class _RadarScreenState extends State<RadarScreen> {
   Timer? _prefetchTimer;
   bool _showPixelNotice = false;
   bool _pixelNoticeExpanded = false;
+  // Whether the current timeline uses the US NEXRAD composite (crisp, native
+  // to the zoom cap) or the RainViewer global fallback.
+  bool _useNexrad = false;
+  // Live camera zoom readout for the top-right indicator pill.
+  late String _zoomLabel = (_hasFix ? 7.5 : 4.0).toStringAsFixed(1);
 
-  String _apiKey = '';
-  bool _promptDismissed = false;
+  // How often the timeline silently re-syncs (NEXRAD regenerates every ~5
+  // minutes, RainViewer publishes new frames roughly every 10).
+  static const Duration _timelineRefreshEvery = Duration(minutes: 5);
+  Timer? _staleTimer;
 
-  bool get _forecastEnabled => _apiKey.isNotEmpty;
+  // True while the user is actively panning/zooming. During a gesture only
+  // the visible radar frame stays mounted: with the whole timeline mounted, a
+  // pinch used to kick off new-zoom tile fetches for ~20 layers at once —
+  // hundreds of simultaneous downloads/decodes, enough main-thread work to
+  // freeze the loading pulse (and the gesture itself). Once the camera
+  // settles, the other frames re-mount via the staggered prefetch.
+  bool _interacting = false;
+  Timer? _interactionSettle;
+
+  // Follow the weather location: when the user picks a different place (or the
+  // first GPS fix arrives), recenter the map there.
+  bool _mapReady = false;
+  double? _followedLat;
+  double? _followedLon;
+
+  // Rebuild the timeline when the Settings page changes the radar range.
+  int? _followedPastHours;
+  int? _followedFutureHours;
+
+  // Last camera position that was fully finite. flutter_map's multi-finger
+  // gesture math can emit a NaN/Infinity camera in rare edge cases (the
+  // fleaflet #2199 family — 8.3.1 fixed one instance, not all); a non-finite
+  // camera makes every TileLayer throw "Infinity or NaN toInt" while
+  // computing its tile range. We watch every camera change and snap back to
+  // this position before the bad camera reaches the tile layers.
+  LatLng? _lastGoodCenter;
+  double? _lastGoodZoom;
 
   @override
   void initState() {
     super.initState();
-    _init();
+    _followedLat = widget.controller.latitude;
+    _followedLon = widget.controller.longitude;
+    _followedPastHours = widget.controller.radarPastHours;
+    _followedFutureHours = widget.controller.radarFutureHours;
+    widget.controller.addListener(_onControllerChanged);
+    _staleTimer = Timer.periodic(_timelineRefreshEvery, (_) {
+      // Only refresh while parked on the live frame — never yank the timeline
+      // out from under a scrub, playback, or an in-progress gesture.
+      if (!mounted || _loading || _playing || _interacting) return;
+      if (_index != _nowIndex) return;
+      _loadFrames(silent: true);
+    });
+    _loadFrames();
   }
 
-  Future<void> _init() async {
-    _apiKey = await _keyStore.loadKey();
-    _promptDismissed = await _keyStore.isPromptDismissed();
-    if (!mounted) return;
-    await _loadFrames();
+  void _onControllerChanged() {
+    // Radar range changed in Settings → rebuild the timeline with it.
+    final past = widget.controller.radarPastHours;
+    final future = widget.controller.radarFutureHours;
+    if (past != _followedPastHours || future != _followedFutureHours) {
+      _followedPastHours = past;
+      _followedFutureHours = future;
+      if (!_loading) _loadFrames();
+    }
+
+    final lat = widget.controller.latitude;
+    final lon = widget.controller.longitude;
+    if (lat == null || lon == null) return;
+    if (lat == _followedLat && lon == _followedLon) return;
+    _followedLat = lat;
+    _followedLon = lon;
+    if (_mapReady) _map.move(LatLng(lat, lon), 7.5);
+    // Crossing in/out of the continental US switches the radar source
+    // (NEXRAD ↔ RainViewer), so the timeline must be rebuilt.
+    if (!_loading && RadarService.isInConus(lat, lon) != _useNexrad) {
+      _loadFrames();
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     _prefetchTimer?.cancel();
+    _staleTimer?.cancel();
+    _interactionSettle?.cancel();
+    widget.controller.removeListener(_onControllerChanged);
     _map.dispose();
+    _fetchMonitor.dispose();
     super.dispose();
   }
 
@@ -123,30 +159,44 @@ class _RadarScreenState extends State<RadarScreen> {
   bool get _hasFix =>
       widget.controller.latitude != null && widget.controller.longitude != null;
 
-  Future<void> _loadFrames() async {
+  /// [silent] refreshes the timeline in place (periodic re-sync) without
+  /// flashing the loading pill or resetting what's on screen mid-look.
+  Future<void> _loadFrames({bool silent = false}) async {
     _prefetchTimer?.cancel();
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final timeline = await _service.loadTimeline(
-        tomorrowApiKey: _apiKey,
-        forecastHours: kForecastHoursAhead,
+        centerLatitude: widget.controller.latitude,
+        centerLongitude: widget.controller.longitude,
+        pastHours: widget.controller.radarPastHours,
+        forecastHours: widget.controller.radarFutureHours,
       );
       if (!mounted) return;
       setState(() {
         _frames = timeline.frames;
         _nowIndex = timeline.nowIndex;
         _index = timeline.nowIndex; // Open on the current time.
+        _useNexrad = timeline.isNexrad;
+        // The low-res notice is RainViewer-only; drop it if we just switched
+        // to NEXRAD while zoomed in (onPositionChanged only fires on moves).
+        if (_useNexrad && _showPixelNotice) {
+          _showPixelNotice = false;
+          _pixelNoticeExpanded = false;
+        }
         _loading = false;
+        _error = null;
         _mounted
           ..clear()
           ..add(timeline.nowIndex); // Paint the current frame first…
       });
       _schedulePrefetch(); // …then quietly fetch the rest of the timeline.
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || silent) return; // A failed re-sync keeps the old frames.
       setState(() {
         _error = 'Could not load radar data.';
         _loading = false;
@@ -154,18 +204,30 @@ class _RadarScreenState extends State<RadarScreen> {
     }
   }
 
-  /// Mounts the remaining frames a short beat after the current one is on
-  /// screen, so their tiles download in the background. This keeps the first
-  /// paint fast (one frame's tiles, not the whole timeline's at once) while
-  /// still making scrubbing and playback instant once prefetch completes.
+  /// Mounts the remaining frames in small batches — nearest to the frame on
+  /// screen first — so their tiles download in the background. This keeps the
+  /// first paint fast (one frame's tiles, not the whole timeline's in a single
+  /// burst) while still making scrubbing and playback instant once prefetch is
+  /// done, and it prioritises the frames the user is most likely to look at.
   void _schedulePrefetch() {
     _prefetchTimer?.cancel();
     if (_mounted.length >= _frames.length) return;
-    _prefetchTimer = Timer(const Duration(milliseconds: 900), () {
-      if (!mounted) return;
+    final queue = [
+      for (var i = 0; i < _frames.length; i++)
+        if (!_mounted.contains(i)) i,
+    ]..sort(
+        (a, b) => (a - _index).abs().compareTo((b - _index).abs()),
+      );
+    var cursor = 0;
+    _prefetchTimer =
+        Timer.periodic(const Duration(milliseconds: 350), (timer) {
+      if (!mounted || cursor >= queue.length) {
+        timer.cancel();
+        return;
+      }
       setState(() {
-        for (var i = 0; i < _frames.length; i++) {
-          _mounted.add(i);
+        for (var n = 0; n < 3 && cursor < queue.length; n++) {
+          _mounted.add(queue[cursor++]);
         }
       });
     });
@@ -186,37 +248,25 @@ class _RadarScreenState extends State<RadarScreen> {
     }
   }
 
-  Future<void> _openForecastSetup() async {
-    _timer?.cancel();
-    if (_playing) setState(() => _playing = false);
-
-    final result = await showForecastSetupSheet(context, initialKey: _apiKey);
-    if (result == null || !mounted) return;
-
-    if (result.isEmpty) {
-      await _keyStore.clearKey();
-      _apiKey = await _keyStore.loadKey(); // may fall back to a --dart-define key
-    } else {
-      await _keyStore.saveKey(result);
-      _apiKey = result;
-      _promptDismissed = false;
-    }
-    if (!mounted) return;
-
-    await _loadFrames();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_forecastEnabled
-            ? 'Forecast radar enabled'
-            : 'Forecast radar turned off'),
-      ),
-    );
-  }
-
-  void _dismissPrompt() {
-    setState(() => _promptDismissed = true);
-    _keyStore.dismissPrompt();
+  /// Collapses the radar stack to just the visible frame for the duration of
+  /// a pan/zoom gesture, then rebuilds the timeline mounts once the camera
+  /// has been still for a beat. (Zoomed tiles have to be re-downloaded either
+  /// way — this just stops ~20 invisible layers from doing it mid-gesture.)
+  void _onGestureActivity() {
+    _interactionSettle?.cancel();
+    _interactionSettle = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      setState(() => _interacting = false);
+      _schedulePrefetch(); // Re-mount the rest of the timeline in batches.
+    });
+    if (_interacting) return;
+    _prefetchTimer?.cancel();
+    setState(() {
+      _interacting = true;
+      _mounted
+        ..clear()
+        ..add(_index);
+    });
   }
 
   @override
@@ -230,15 +280,45 @@ class _RadarScreenState extends State<RadarScreen> {
             initialCenter: _center,
             initialZoom: _hasFix ? 7.5 : 4,
             minZoom: 3,
-            maxZoom: 15,
+            maxZoom: mapMaxZoom,
             backgroundColor: const Color(0xFF0E1320),
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
             ),
-            onPositionChanged: (camera, _) {
-              final show = camera.zoom > pixelNoticeZoom;
-              if (show != _showPixelNotice) {
+            onMapReady: () {
+              _mapReady = true;
+              // Seed the sanitizer so recovery works even if the very first
+              // gesture is the one that produces a non-finite camera.
+              _lastGoodCenter = _map.camera.center;
+              _lastGoodZoom = _map.camera.zoom;
+            },
+            onPositionChanged: (camera, hasGesture) {
+              // Camera sanitizer: a NaN/Infinity camera (rare flutter_map
+              // pinch edge case) would crash every TileLayer's tile-range
+              // math this frame. Restore the last finite position instead —
+              // this runs before the layers rebuild, so nothing downstream
+              // ever sees the poisoned camera.
+              if (!camera.zoom.isFinite ||
+                  !camera.center.latitude.isFinite ||
+                  !camera.center.longitude.isFinite) {
+                final center = _lastGoodCenter;
+                final zoom = _lastGoodZoom;
+                if (center != null && zoom != null) {
+                  _map.move(center, zoom);
+                }
+                return;
+              }
+              _lastGoodCenter = camera.center;
+              _lastGoodZoom = camera.zoom;
+
+              if (hasGesture) _onGestureActivity();
+              final zoomLabel = camera.zoom.toStringAsFixed(1);
+              // The IEM sources upscale smoothly past their native caps —
+              // the low-res notice only applies to the RainViewer fallback.
+              final show = !_useNexrad && camera.zoom > pixelNoticeZoom;
+              if (show != _showPixelNotice || zoomLabel != _zoomLabel) {
                 setState(() {
+                  _zoomLabel = zoomLabel;
                   _showPixelNotice = show;
                   if (!show) _pixelNoticeExpanded = false;
                 });
@@ -255,6 +335,8 @@ class _RadarScreenState extends State<RadarScreen> {
               subdomains: const ['a', 'b', 'c', 'd'],
               userAgentPackageName: 'com.dewpoint.dew_point_tracker',
               maxZoom: 19,
+              tileProvider:
+                  NetworkTileProvider(httpClient: _fetchMonitor.client),
             ),
             ..._radarLayers(),
             // Town / city labels, drawn on top of the radar so names remain
@@ -266,6 +348,8 @@ class _RadarScreenState extends State<RadarScreen> {
               subdomains: const ['a', 'b', 'c', 'd'],
               userAgentPackageName: 'com.dewpoint.dew_point_tracker',
               maxZoom: 19,
+              tileProvider:
+                  NetworkTileProvider(httpClient: _fetchMonitor.client),
             ),
             if (_hasFix)
               MarkerLayer(
@@ -290,10 +374,49 @@ class _RadarScreenState extends State<RadarScreen> {
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
               child: Column(
                 children: [
-                  _TopBar(
-                    label: widget.controller.locationLabel ?? 'Radar',
-                    onRecenter: () => _map.move(_center, _hasFix ? 7.5 : 4),
-                    onSettings: _openForecastSetup,
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _fetchMonitor.busy,
+                    builder: (context, fetching, _) => _TopBar(
+                      label: widget.controller.locationLabel ?? 'Radar',
+                      // Pulse while the timeline is being fetched OR any map
+                      // tile is still downloading — so "is it stuck or just
+                      // loading?" is answered by the glow.
+                      busy: fetching || _loading,
+                      onSearch: () =>
+                          openLocationSearch(context, widget.controller),
+                      onRecenter: () => _map.move(_center, _hasFix ? 7.5 : 4),
+                    ),
+                  ),
+                  // Live zoom-level readout, updated as the camera moves.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: GlassPill(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 7),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.zoom_in_rounded,
+                              size: 16,
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              _zoomLabel,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                   AnimatedSize(
                     duration: const Duration(milliseconds: 220),
@@ -306,23 +429,6 @@ class _RadarScreenState extends State<RadarScreen> {
                               expanded: _pixelNoticeExpanded,
                               onToggle: () => setState(() =>
                                   _pixelNoticeExpanded = !_pixelNoticeExpanded),
-                            ),
-                          )
-                        : const SizedBox(width: double.infinity),
-                  ),
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOut,
-                    alignment: Alignment.topCenter,
-                    child: (!_forecastEnabled &&
-                            !_promptDismissed &&
-                            !_loading &&
-                            _error == null)
-                        ? Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: _ForecastAskCard(
-                              onSetup: _openForecastSetup,
-                              onDismiss: _dismissPrompt,
                             ),
                           )
                         : const SizedBox(width: double.infinity),
@@ -356,51 +462,55 @@ class _RadarScreenState extends State<RadarScreen> {
       // radar paints fast instead of downloading the whole timeline up front.
       if (!_mounted.contains(i)) continue;
       final frame = _frames[i];
-      final isForecast = frame.isForecast;
-      final baseOpacity = isForecast ? 0.62 : 0.72;
+      final baseOpacity = frame.isForecast ? 0.62 : 0.78;
+      final layer = TileLayer(
+        // Every radar URL now embeds an explicit timestamp (scan time or
+        // model run), so the template itself is a sufficient identity — a
+        // timeline refresh swaps templates and only new frames remount.
+        key: ValueKey(frame.tileUrlTemplate),
+        urlTemplate: frame.tileUrlTemplate,
+        userAgentPackageName: 'com.dewpoint.dew_point_tracker',
+        // Each frame carries its own tile geometry: the IEM sources are
+        // plain 256px tiles capped at the zoom where one data cell ≈ one
+        // tile pixel (NEXRAD 8, HRRR 6); RainViewer uses 512px tiles with
+        // zoomOffset -1 (double detail, native to camera zoom 8).
+        // flutter_map upscales past each cap with bilinear filtering, which
+        // interpolates between data cells — the smooth TWC-style look.
+        tileDimension: frame.tileDimension,
+        zoomOffset: frame.zoomOffset,
+        maxNativeZoom: frame.maxNativeZoom,
+        // Radar layers skip the default one-tile pan margin: with a whole
+        // timeline of layers resident, that margin multiplies into dozens of
+        // extra offscreen downloads per camera move for imagery the user may
+        // never scrub to. Soft precip edges make the pop-in invisible anyway.
+        panBuffer: 0,
+        tileProvider: NetworkTileProvider(
+          httpClient: _fetchMonitor.client,
+          // Radar tiles legitimately error sometimes: RainViewer past frames
+          // expire mid-session, and a just-published NEXRAD scan time can
+          // briefly 503. By default flutter_map then tries to DECODE the
+          // error response body (JSON/HTML text) as an image, which floods
+          // logcat with native "Failed to decode image" errors. Skip that,
+          // and just treat a failed tile as absent — a missing precip tile
+          // is fine to silently drop.
+          attemptDecodeOfHttpErrorResponses: false,
+          silenceExceptions: true,
+        ),
+        // No fade: the active frame is already loaded, so it swaps in fully
+        // drawn. That reads as weather moving across the map rather than one
+        // frame cross-fading into the next.
+        tileDisplay: const TileDisplay.instantaneous(),
+      );
+      // Opacity short-circuits painting at 0, so only the single visible
+      // frame is ever drawn. (Smoothing past native resolution needs no
+      // screen-space filter: each frame's maxNativeZoom is capped where one
+      // data cell ≈ one tile pixel, so the bilinear tile upscale interpolates
+      // between cells instead of magnifying hard squares — an earlier
+      // squares-plus-Gaussian-blur pass read as blurry AND blocky at once.)
       layers.add(
         Opacity(
           opacity: i == _index ? baseOpacity : 0.0,
-          // Smooth the blocky data cells into fluid contours. Wrapping only the
-          // radar tiles (not the basemap or the labels above) keeps roads and
-          // place names crisp while the precipitation reads as smooth shapes.
-          // Opacity short-circuits painting at 0, so this filter only ever runs
-          // on the single visible frame.
-          child: ImageFiltered(
-            imageFilter: _radarSmoothFilter,
-            child: TileLayer(
-              key: ValueKey(frame.tileUrlTemplate),
-              urlTemplate: frame.tileUrlTemplate,
-              userAgentPackageName: 'com.dewpoint.dew_point_tracker',
-              // RainViewer past/nowcast top out at zoom 7 (above which its
-              // server returns a "Zoom Level Not Supported" placeholder);
-              // Tomorrow.io forecast goes finer. Cap native fetches accordingly
-              // and upscale.
-              maxNativeZoom:
-                  isForecast ? forecastMaxNativeZoom : radarMaxNativeZoom,
-              tileProvider: NetworkTileProvider(
-                // Forecast tiles are stable per timestamp, so let them cache
-                // (fewer API calls when looping). RainViewer frames are
-                // ephemeral — don't cache them (avoids "fallback freshness age"
-                // log spam).
-                cachingProvider:
-                    isForecast ? null : const DisabledMapCachingProvider(),
-                // Radar tiles legitimately error sometimes: RainViewer past
-                // frames expire mid-session, and Tomorrow.io rejects a bad key
-                // or out-of-range timestamp. By default flutter_map then tries
-                // to DECODE the error response body (JSON/HTML text) as an
-                // image, which floods logcat with native "Failed to decode
-                // image" errors. Skip that, and just treat a failed tile as
-                // absent — a missing precip tile is fine to silently drop.
-                attemptDecodeOfHttpErrorResponses: false,
-                silenceExceptions: true,
-              ),
-              // No fade: the active frame is already loaded, so it swaps in
-              // fully drawn. That reads as weather moving across the map rather
-              // than one frame cross-fading into the next.
-              tileDisplay: const TileDisplay.instantaneous(),
-            ),
-          ),
+          child: layer,
         ),
       );
     }
@@ -573,47 +683,60 @@ class _RadarScreenState extends State<RadarScreen> {
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.label,
+    required this.busy,
+    required this.onSearch,
     required this.onRecenter,
-    required this.onSettings,
   });
 
   final String label;
+
+  /// While true the location pill pulses with a soft glow — the "map is
+  /// loading" indicator.
+  final bool busy;
+
+  final VoidCallback onSearch;
   final VoidCallback onRecenter;
-  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
+        // The place pill doubles as the location switcher, same as on Home.
         Expanded(
-          child: GlassPill(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.radar_rounded, size: 18, color: Colors.white),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
+          child: GestureDetector(
+            onTap: onSearch,
+            child: _PulsingGlow(
+              active: busy,
+              child: GlassPill(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.radar_rounded,
+                        size: 18, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        label,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.expand_more_rounded,
+                      size: 18,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        GestureDetector(
-          onTap: onSettings,
-          child: const GlassPill(
-            padding: EdgeInsets.all(12),
-            child: Icon(Icons.tune_rounded, size: 20, color: Colors.white),
           ),
         ),
         const SizedBox(width: 10),
@@ -629,90 +752,75 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// A dismissible card that asks whether the user wants to enable forecast radar.
-class _ForecastAskCard extends StatelessWidget {
-  const _ForecastAskCard({required this.onSetup, required this.onDismiss});
+/// Wraps a pill with a soft, breathing glow while [active] — the radar's
+/// "still loading" heartbeat. The glow eases out (rather than snapping off)
+/// when loading finishes.
+class _PulsingGlow extends StatefulWidget {
+  const _PulsingGlow({required this.active, required this.child});
 
-  final VoidCallback onSetup;
-  final VoidCallback onDismiss;
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_PulsingGlow> createState() => _PulsingGlowState();
+}
+
+class _PulsingGlowState extends State<_PulsingGlow>
+    with SingleTickerProviderStateMixin {
+  static const Color _glow = Color(0xFF4FB0E8);
+
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PulsingGlow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active == oldWidget.active) return;
+    if (widget.active) {
+      _pulse.repeat(reverse: true);
+    } else {
+      // Fade the glow out smoothly from wherever the pulse currently is.
+      _pulse.animateBack(0, duration: const Duration(milliseconds: 300));
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      borderRadius: 20,
-      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.satellite_alt_rounded,
-                  size: 20, color: Color(0xFFFFC15E)),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'See the future?',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: onDismiss,
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.close_rounded,
-                      size: 18, color: Colors.white.withValues(alpha: 0.6)),
-                ),
-              ),
-            ],
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        final t = _pulse.value;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: t == 0
+                ? const []
+                : [
+                    BoxShadow(
+                      color: _glow.withValues(alpha: 0.20 + 0.35 * t),
+                      blurRadius: 12 + 10 * t,
+                      spreadRadius: 0.5 + 2.5 * t,
+                    ),
+                  ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Add forecast radar to see up to 6 hours of predicted rain & snow. '
-            "It's free with a Tomorrow.io key.",
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.75),
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              TextButton(
-                onPressed: onDismiss,
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white.withValues(alpha: 0.7),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                child: const Text('Not now'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: onSetup,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFC15E),
-                  foregroundColor: const Color(0xFF1A1300),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Set it up',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }
@@ -772,7 +880,7 @@ class _PixelNotice extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        'Live radar imagery is only produced up to about zoom 7. '
+                        'Live radar imagery is only produced up to about zoom 8. '
                         'Beyond that it gets stretched to fit, so it can look '
                         'blocky. Zoom out a little for sharper detail.',
                         style: TextStyle(

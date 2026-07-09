@@ -14,18 +14,32 @@ class RootShell extends StatefulWidget {
   State<RootShell> createState() => _RootShellState();
 }
 
-class _RootShellState extends State<RootShell> {
+class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   final WeatherController _controller = WeatherController();
   int _index = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller.load();
+    // Keep conditions current: Open-Meteo refreshes ~every 15 minutes, and
+    // stale data was the main reason the app disagreed with the sky outside.
+    _controller.startAutoRefresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Coming back from the background is when data is most likely stale
+    // (periodic timers don't fire while suspended on mobile).
+    if (state == AppLifecycleState.resumed) {
+      _controller.refreshIfStale();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }

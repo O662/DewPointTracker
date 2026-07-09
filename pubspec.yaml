@@ -37,7 +37,9 @@ dependencies:
   http: ^1.6.0
   geolocator: ^14.0.3
   geocoding: ^4.0.0
-  flutter_map: ^8.3.0
+  # 8.3.1+ required: 8.3.0 had a gesture bug that crashed the map with
+  # "LatLng is not finite: NaN" during panning/zooming (fleaflet #2199).
+  flutter_map: ^8.3.1
   latlong2: ^0.9.1
   intl: ^0.20.3
   shared_preferences: ^2.5.5

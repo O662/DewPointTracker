@@ -54,11 +54,27 @@ class LocationService {
       );
     }
 
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.medium,
-      ),
-    );
+    // A fresh fix can hang for a long time indoors or with a weak GPS signal,
+    // which previously left the app stuck on "Finding your weather…". Bound
+    // the wait and fall back to the last known position — for weather, a fix
+    // from a little while ago is far better than no weather at all.
+    Position position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+    } catch (_) {
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown == null) {
+        throw const LocationException(
+          'Could not get a location fix. Try again, or search for a city.',
+        );
+      }
+      position = lastKnown;
+    }
 
     final label = await _reverseGeocode(position.latitude, position.longitude);
 

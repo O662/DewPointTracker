@@ -1,22 +1,19 @@
 /// Configuration for the radar timeline.
-///
-/// To enable the 6–8 hour FORECAST radar, get a free API key from
-/// https://www.tomorrow.io/weather-api/ and either:
-///   • paste it into [_defaultTomorrowApiKey] below, or
-///   • pass it at launch:  flutter run --dart-define=TOMORROW_API_KEY=your_key
-///
-/// Leave it blank to keep the app fully free / no-key (it will just show the
-/// past 2 hours of RainViewer radar + any short nowcast).
 library;
 
-const String _defaultTomorrowApiKey = '';
+/// Default / allowed hours of radar history. NEXRAD archive tiles are
+/// timestamped, so any range works — but frame spacing grows with the range
+/// (see RadarService) to keep the number of mounted tile layers sane.
+const int kDefaultRadarPastHours = 1;
+const int kMinRadarPastHours = 1;
+const int kMaxRadarPastHours = 6;
 
-const String kTomorrowApiKey = String.fromEnvironment(
-  'TOMORROW_API_KEY',
-  defaultValue: _defaultTomorrowApiKey,
-);
-
-/// How many hours ahead to request forecast frames. Tomorrow.io's
-/// `precipitationIntensity` layer only forecasts up to 6 hours out, so that is
-/// the effective ceiling for this field.
-const int kForecastHoursAhead = 6;
+/// Default / allowed hours of forecast radar ahead of "now".
+///
+/// Inside the continental US these come from the HRRR model via the Iowa
+/// State Mesonet tile cache — free, no API key — which forecasts up to 18
+/// hours out, so that is the hard ceiling. Outside the US the timeline falls
+/// back to RainViewer's short (~30 minute) nowcast regardless of this value.
+const int kDefaultRadarFutureHours = 8;
+const int kMinRadarFutureHours = 1;
+const int kMaxRadarFutureHours = 18;
