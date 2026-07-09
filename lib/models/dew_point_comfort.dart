@@ -8,32 +8,32 @@ import 'units.dart';
 enum DewPointComfort {
   dry(
     label: 'Dry',
-    blurb: 'Crisp and arid air',
+    blurb: 'Don\'t forget to hydrate!',
     color: Color(0xFF4FB0E8),
   ),
   comfortable(
     label: 'Comfortable',
-    blurb: 'Pleasant and easy',
+    blurb: 'A good time to get things done!',
     color: Color(0xFF35D29A),
   ),
   sticky(
     label: 'Sticky',
-    blurb: 'A little humid',
+    blurb: 'A little humid. :/',
     color: Color(0xFFD8D24B),
   ),
   muggy(
     label: 'Muggy',
-    blurb: 'Noticeably humid',
+    blurb: 'hope you\'re not doing anything strenuous...',
     color: Color(0xFFF2A33C),
   ),
   oppressive(
     label: 'Oppressive',
-    blurb: 'Heavy, sweaty air',
+    blurb: 'Who needs a sauna when you have this?',
     color: Color(0xFFEE6C4D),
   ),
   miserable(
     label: 'Miserable',
-    blurb: 'Tropical and draining',
+    blurb: 'Realm of despair. Stay inside and cry.',
     color: Color(0xFFE3415E),
   );
 
